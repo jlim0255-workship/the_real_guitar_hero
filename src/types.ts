@@ -18,7 +18,8 @@ const Constants = {
     CIRCLE_CY: 350,         // the y coordinate of the circles
     STEPSIZE: 2,            // the step size of the circles
     RADIUS: 0.07 * Viewport.CANVAS_WIDTH,       // the radius of the circles
-    RANDOM_NOTE_VELOCITY: 100,            // the velocity of the random note           
+    RANDOM_NOTE_VELOCITY: 100,            // the velocity of the random note
+    PIXELS_PER_SECOND: 100,               // tail height scale: 100px per second of note duration           
     SONG_NAME: "RockinRobin",   // the song name
 
 } as const;
@@ -31,20 +32,22 @@ const Constants = {
  */
 type State = Readonly<{
     gameEnd: boolean;
-    activeCircles: ReadonlyArray<circleBody>;   // circles appering on the screen right now
-    expiredCircles: ReadonlyArray<circleBody>;  // circles that have been clicked or missed
-    userPlayCircles: ReadonlyArray<circleBody>; // circles for user to play
-    note: Note | undefined                      // the note to play
+    activeCircles: ReadonlyArray<circleBody>;   // all circles currently falling (user-played and background)
+    expiredCircles: ReadonlyArray<circleBody>;  // this tick's expired circles (missed or hit), cleared next tick
+    activeTails: ReadonlyArray<tailBody>;       // tail rectangles currently falling
+    expiredTails: ReadonlyArray<tailBody>;      // this tick's expired tails, cleared next tick
+    note: Note | undefined                      // the most recent note, used for background sound
     score: number,                              // the score of the game
     highScore: number,                          // the high score of the game
     time: number,                               // the time of the game in seconds
-    circleCount: number,                        // the count of circles
-    actions: ReadonlyArray<string>,             // the actions of the game, (playRandomNote)
-    paused: boolean,                            // the game is paused or not
-    multiplier: number,                         // the multiplier of the game
-    comboCount: number,                         // the combo count of the game
-    missedCount: number,                        // the missed count of the game
+    circleCount: number,                        // the count of circles, used to assign unique ids
+    actions: ReadonlyArray<string>,             // pending one-tick actions e.g. "playRandomNote"
+    paused: boolean,                            // whether the game is paused
+    multiplier: number,                         // score multiplier, increases with consecutive hits
+    comboCount: number,                         // consecutive hits without a miss
+    missedCount: number,                        // total missed notes
 }>;
+
 
 
 /**
@@ -76,21 +79,23 @@ type circleBody = Readonly<{
 }>
 
 /**
- * TailNote object
+ * tailBody represents a long note tail rectangle.
+ * Linked to its parent circleBody by sharing the same id.
+ * cy is the top edge of the SVG rect, increases each tick as tail falls.
+ * height is fixed at creation, calculated from note duration * pixels per second.
+ * held tracks whether the user is currently holding the correct key over this tail.
  */
-type tailNote = Readonly<{
-    id: string;
-    r: string;
-    cx: string;
-    cy: string;
-    style: string;
+type tailBody = Readonly<{
+    id: string;         // same id as parent circleBody
+    cx: string;         // same column as parent circle
+    cy: string;         // top edge of rect, increases each tick
+    width: string;      // diameter of the parent circle
+    height: string;     // fixed height proportional to note duration
+    style: string;      // same color as parent circle
     class: string;
     note: Note;
-    clicked: boolean;
-    tailStart: number; 
-    tailEnd: number;   
-    duration: number; 
-}>;
+    held: boolean;      // true while user holds correct key over this tail
+}>
 
 
 /**
