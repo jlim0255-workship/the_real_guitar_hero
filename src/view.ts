@@ -1,5 +1,5 @@
 export { updateView, show, hide};
-import {State, circleBody, Constants, Viewport} from './types';
+import {State, circleBody, tailBody, Constants, Viewport} from './types';
 // import {samples} from './main';
 import {svg, gameover, RNG} from './util';
 import * as Tone from "tone";
@@ -155,116 +155,133 @@ function playNoteForCircle(s: State, circle: circleBody, samples: { [key: string
 
 
 /**
- * This function will update the svg view of the game
- * Including the sound effects for the background music and user played notes, circles, score, multiplier, high score, combo, and missed notes
- * This use of rendering game screen is inspired by the FRP Asteroids game example, similar to the updateView function
+ * Updates the position of a falling circle in the SVG canvas.
+ * Creates the SVG element if it does not exist yet, otherwise updates cy.
+ * This pattern (create-or-update) avoids recreating elements every tick.
+ */
+const updateCircleView = (circle: circleBody): void => {
+    const existing = document.getElementById(circle.id)
+    if (existing) {
+        existing.setAttribute("cy", circle.cy)
+    } else {
+        const elem = createSvgElement(svg.namespaceURI, "circle", {
+            r: circle.r,
+            cx: circle.cx,
+            cy: circle.cy,
+            style: circle.style,
+            class: circle.class,
+            id: circle.id,
+        })
+        svg.appendChild(elem)
+    }
+}
+
+/**
+ * Updates the position of a falling tail rectangle in the SVG canvas.
+ * Tails use a "tail_" prefix on their id to avoid clashing with their
+ * parent circle which shares the same base id.
+ * Creates the SVG rect if it does not exist, otherwise updates y.
+ */
+const updateTailView = (tail: tailBody): void => {
+    const tailId = `tail_${tail.id}`
+    const existing = document.getElementById(tailId)
+
+    // x position: offset left by half the width so tail is centered on column
+    // cx is a percentage string like "20%", convert to SVG units
+    const cxPercent = parseFloat(tail.cx) / 100
+    const x = String(cxPercent * Viewport.CANVAS_WIDTH - Number(tail.width) / 2)
+
+    if (existing) {
+        existing.setAttribute("y", tail.cy)
+    } else {
+        const elem = createSvgElement(svg.namespaceURI, "rect", {
+            x,
+            y: tail.cy,
+            width: tail.width,
+            height: tail.height,
+            style: tail.style,
+            class: tail.class,
+            id: tailId,
+        })
+        svg.appendChild(elem)
+    }
+}
+
+/**
+ * Removes an SVG element from the canvas by id.
+ * Safe to call even if the element does not exist.
+ */
+const removeFromSvg = (id: string): void => {
+    const elem = document.getElementById(id)
+    if (elem) svg.removeChild(elem)
+}
+
+/**
+ * updateView is the only function that produces side effects (DOM + sound).
+ * All game logic lives in state.ts - this function only reads state and renders it.
+ * Inspired by the FRP Asteroids updateView pattern.
  * @param s the current state
- * @param samples the samples to play the notes
- * @returns void
+ * @param samples the Tone.js sampler instruments
  */
 function updateView(s: State, samples: { [key: string]: Tone.Sampler }): void {
 
-    // If the game is not paused, render the view with the current state
-    // Including the sound effects for the background music and user played notes
-    // circles, score, multiplier, high score, combo, and missed notes
-    if (s.paused === false) {
-        if (s.note) {
-            // play the background music
-            playNote(s, samples)
-        }
+    if (s.paused) return
 
-        // If there are user played circles, play the notes for them
-        if (s.userPlayCircles) {            
-            s.userPlayCircles.forEach(circle => {
-                if (circle.clicked) {
-                    playNoteForCircle(s, circle, samples);
-                    // Reset clicked to false after playing
-                }
-            });            
-        }
-        
-        // If there are actions, perform them
-        // This will play a random note if the action is "playRandomNote"
-        if (s.actions) {            
-            s.actions.forEach(action => {
-            if (action === "playRandomNote") {
-                playRandomNote(s.time, samples);
-                }
-            });
-        }
-        
-        // Update the view for all active circles
-        const updateBodyView = (circle: circleBody) => {
-            function createCircleBodyView() {   
-                
-                // Create the SVG circle element
-                // Set the attributes based on the circle properties
-                const circleElement = createSvgElement(svg.namespaceURI, "circle", 
-                    {
-                        r: circle.r,
-                        cx: circle.cx,
-                        cy: circle.cy,
-                        style: circle.style,
-                        class: circle.class,
-                        id: circle.id,
-                        clicked: String(circle.clicked)
-                    }
-                );         
-                // Append the circle to the SVG canvas               
-                svg.appendChild(circleElement)
+    // play background notes (user_played === false)
+    if (s.note) playNote(s, samples)
 
-                // Return the circle element
-                return circleElement;
+    // [FIX] sound trigger now uses expiredCircles instead of userPlayCircles
+    // a circle in expiredCircles with clicked: true was just hit by the user
+    s.expiredCircles
+        .filter(circle => circle.clicked && circle.note?.user_played)
+        .forEach(circle => playNoteForCircle(s, circle, samples))
+
+    // play held tail notes: while a tail is held, keep triggering the note
+    // Tone.js handles deduplication of attack calls on the same note
+    s.activeTails
+        .filter(tail => tail.held)
+        .forEach(tail => {
+            if (samples[tail.note.instrument_name]) {
+                samples[tail.note.instrument_name].triggerAttack(
+                    Tone.Frequency(tail.note.pitch, "midi").toNote(),
+                    undefined,
+                    tail.note.velocity / 127
+                )
             }
-            
-            // Create the circle element if it doesn't exist
-            // If it does exist, update the cy attribute
-            const circleElement = document.getElementById(circle.id) || createCircleBodyView();            
-            circleElement.setAttribute("cy", circle.cy);            
-        };        
-
-        // Update the view for all active circles
-        s.activeCircles.forEach(updateBodyView)
-
-        // Update the view for all user played circles
-        s.expiredCircles.forEach(circle => {
-
-            // Get all the circles that are expired (passing the canvas border)
-            const circleElement = document.getElementById(circle.id)
-            
-            // Remove the circle from the view
-            if (circleElement){    
-                svg.removeChild(circleElement)
-            }            
-            
         })
 
-        // Update the view for score
-        const score = document.getElementById("scoreText")!
-        score.textContent = String(s.score)
-        
-        // Update the view for multiplier
-        const multiplier = document.getElementById("multiplierText")!
-        multiplier.textContent = String(s.multiplier)
+    // stop released tail notes: when held becomes false, trigger release
+    s.expiredTails
+        .filter(tail => !tail.held)
+        .forEach(tail => {
+            if (samples[tail.note.instrument_name]) {
+                samples[tail.note.instrument_name].triggerRelease(
+                    Tone.Frequency(tail.note.pitch, "midi").toNote()
+                )
+            }
+        })
 
-        // Update the view for high score
-        const highScore = document.getElementById("highScoreText")!
-        highScore.textContent = String(s.highScore)
+    // trigger random note on miss
+    s.actions
+        .filter(action => action === "playRandomNote")
+        .forEach(() => playRandomNote(s.time, samples))
 
-        // Update the view for combo
-        const currentCombo = document.getElementById("comboText")!
-        currentCombo.textContent = String(s.comboCount)
+    // render all active circles (create or update cy)
+    s.activeCircles.forEach(updateCircleView)
 
-        // Update the view for missed notes
-        const missedNotes = document.getElementById("missedText")!
-        missedNotes.textContent = String(s.missedCount)
-        
-    }
-    
-                                    
-    // If the game is paused, not render the view
+    // render all active tails (create or update y)
+    s.activeTails.forEach(updateTailView)
 
+    // remove expired circles from DOM
+    s.expiredCircles.forEach(circle => removeFromSvg(circle.id))
 
-    
+    // remove expired tails from DOM
+    s.expiredTails.forEach(tail => removeFromSvg(`tail_${tail.id}`))
 
+    // update score display
+    document.getElementById("scoreText")!.textContent = String(s.score)
+    document.getElementById("multiplierText")!.textContent = String(s.multiplier)
+    document.getElementById("highScoreText")!.textContent = String(s.highScore)
+    document.getElementById("comboText")!.textContent = String(s.comboCount)
+    document.getElementById("missedText")!.textContent = String(s.missedCount)
 }

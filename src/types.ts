@@ -1,5 +1,5 @@
 export { Constants, Viewport }
-export type {circleBody, State, Note, Key, Event, Action}
+export type {circleBody, tailBody, State, Note, Key, Event, Action}
 
 /**
  * Constants for the game
