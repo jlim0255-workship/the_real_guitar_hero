@@ -1,19 +1,10 @@
 export { updateView, show, hide};
-import {State, circleBody, Constants, Viewport, LaneKey} from './types';
+import {State, circleBody, Constants, Viewport} from './types';
 // import {samples} from './main';
 import {svg, gameover, RNG} from './util';
 import * as Tone from "tone";
 
 /** State processing */
-
-// Keeps us from retriggering attack multiple times while holding the same lane
-const holdingLanes = new Set<LaneKey>();
-
-// Cache the last sustained note per lane so we can release it reliably
-const laneLastNote: Record<LaneKey, { instrument_name: string; pitch: number; velocity: number } | null> = {
-  KeyH: null, KeyJ: null, KeyK: null, KeyL: null
-};
-
 
 /**
  * Displays a SVG element on the canvas. Brings to foreground.
@@ -30,6 +21,7 @@ const show = (elem: SVGGraphicsElement) => {
  */
 const hide = (elem: SVGGraphicsElement) =>
     elem.setAttribute("visibility", "hidden");
+
 
 /**
  * Creates an SVG element with the given properties.
@@ -97,97 +89,11 @@ const playNote = (s: State, samples: {[key: string]: Tone.Sampler }): void => {
 };
 
 
-function renderTails(state: State) {
-  // Clear previously drawn tails
-  Array.from(svg.querySelectorAll(".tail")).forEach(n => n.remove());
-
-  for (const t of state.tails) {
-    // map lane -> cx%
-    const cxPct =
-      t.laneKey === "KeyH" ? Constants.GREEN_CX :
-      t.laneKey === "KeyJ" ? Constants.RED_CX   :
-      t.laneKey === "KeyK" ? Constants.BLUE_CX  : Constants.YELLOW_CX;
-
-    const laneXPercent = Number(cxPct.replace("%", ""));
-    const laneX = (laneXPercent / 100) * Viewport.CANVAS_WIDTH;
-
-    // Convert ms to px using your fall speed (STEPSIZE per TICK)
-    const tickMs = (Constants as any).TICK_RATE_MS ?? 10;
-    const pxPerMs = Constants.STEPSIZE / tickMs;
-
-    const totalPx  = t.totalMs * pxPerMs;
-    const remainPx = t.remainingMs * pxPerMs;
-
-    
-    const yTop = Constants.CIRCLE_CY - totalPx;          // tail stretches upward from hit line
-    const width = Constants.RADIUS * 4;
-    const height = Math.max(0, remainPx);
-    const x = laneX - width/2;
-
-    const klass =
-      t.status === "fail" ? "tail fail" :
-      t.status === "holding" ? "tail held" : "tail";
-
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", String(x));
-    rect.setAttribute("y", String(yTop));
-    rect.setAttribute("width", String(width));
-    rect.setAttribute("height", String(height));
-    rect.setAttribute("class", klass);
-    // svg.appendChild(rect);
-    rect.setAttribute("pointer-events", "none"); // don’t block mouse/hover
-    svg.insertBefore(rect, svg.firstChild);      // draw behind heads
-
-  }
-}
-
-function handleAudioActions(state: State, samples: { [key: string]: Tone.Sampler }) {
-  for (const a of state.actions) {
-    if (a.startsWith("startHold:")) {
-      const lane = a.split(":")[1] as LaneKey;
-
-      // Don’t re-trigger while already sustaining this lane
-      if (holdingLanes.has(lane)) continue;
-
-      // Find an active tail on this lane (idle/holding)
-      const t = state.tails.find(tt => tt.laneKey === lane && (tt.status === "idle" || tt.status === "holding"));
-      const note = t?.note;
-      if (!note) continue;
-
-      const inst = samples[note.instrument_name];
-      if (!inst) continue;
-
-      try {
-        // Attack (sustain)
-        inst.triggerAttack(Tone.Frequency(note.pitch, "midi").toNote(), undefined, note.velocity / 127);
-        holdingLanes.add(lane);
-        laneLastNote[lane] = { instrument_name: note.instrument_name, pitch: note.pitch, velocity: note.velocity };
-      } catch {}
-    }
-
-    if (a.startsWith("stopHold:")) {
-      const lane = a.split(":")[1] as LaneKey;
-
-      // Release using cached info (tail may already be removed from state)
-      const last = laneLastNote[lane];
-      if (last) {
-        const inst = samples[last.instrument_name];
-        if (inst) {
-          try { inst.triggerRelease(Tone.Frequency(last.pitch, "midi").toNote()); } catch {}
-        }
-      }
-      holdingLanes.delete(lane);
-      laneLastNote[lane] = null;
-    }
-  }
-}
-
-
 
 /**
  * This function generates a random note based on the seed and plays it
  * This use of playing note is inspired by Week 4 applied class, 
- * from the: piano example and GPT
+ * from the: piano example
  * 
  * @param seed The seed to generate the random note
  * @param samples The samples to play the notes
@@ -332,12 +238,6 @@ function updateView(s: State, samples: { [key: string]: Tone.Sampler }): void {
             }            
             
         })
-
-        // 👉 NEW: draw/update tails
-        renderTails(s);
-
-        // 👉 NEW: sustain/release audio for long notes
-        handleAudioActions(s, samples);
 
         // Update the view for score
         const score = document.getElementById("scoreText")!

@@ -1,5 +1,6 @@
 export { Constants, Viewport }
 export type {circleBody, State, Note, Key, Event, Action}
+
 /**
  * Constants for the game
  */
@@ -43,9 +44,6 @@ type State = Readonly<{
     multiplier: number,                         // the multiplier of the game
     comboCount: number,                         // the combo count of the game
     missedCount: number,                        // the missed count of the game
-    tails: TailNote[];                      // active tails
-    holds: Record<LaneKey, boolean>;        // is key currently down per lane
-    playing: Record<LaneKey, Note | null>;  // audio currently playing per lane
 }>;
 
 
@@ -77,24 +75,23 @@ type circleBody = Readonly<{
     clicked: boolean    // the circle is clicked or not
 }>
 
+/**
+ * TailNote object
+ */
+type tailNote = Readonly<{
+    id: string;
+    r: string;
+    cx: string;
+    cy: string;
+    style: string;
+    class: string;
+    note: Note;
+    clicked: boolean;
+    tailStart: number; 
+    tailEnd: number;   
+    duration: number; 
+}>;
 
-// How long is "long"
-export const LONG_NOTE_THRESHOLD_MS = 1000;
-
-// Lane keys we use
-export type LaneKey = 'KeyH' | 'KeyJ' | 'KeyK' | 'KeyL';
-
-// Tail state for a long note
-export type TailStatus = 'idle' | 'holding' | 'fail' | 'done';
-
-export interface TailNote {
-  id: string;             // same id as the head circle
-  laneKey: LaneKey;       // which lane
-  totalMs: number;        // full duration
-  remainingMs: number;    // countdown to 0
-  status: TailStatus;     // holding / fail / done
-  note: Note;             // original note
-}
 
 /**
  * Key codes, string literals for the keys used in game controls

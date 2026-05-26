@@ -105,18 +105,3 @@ svg rect {
     stroke: rgb(255, 0, 0);
     stroke-width: 5;
   }
-
-.tail {
-  fill: rgba(255,255,255,0.3);
-}
-.tail.held {
-  fill: rgba(0,255,0,0.5);
-}
-.tail.fail {
-  fill: rgba(255,0,0,0.5);
-}
-
-circle {
-  stroke: rgba(0,0,0,0.6);
-  stroke-width: 2px;
-}

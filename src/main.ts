@@ -22,11 +22,11 @@ import { map, filter, scan, switchMap, debounceTime, withLatestFrom, take} from 
 import * as Tone from "tone";
 import { SampleLibrary } from "./tonejs-instruments";
 import { Key, State, Constants, Viewport, Note} from './types';
-import { initialState, reduceState, PressedKey, ReleasedKey, Tick, CircleInfo, EndGameAction} from './state';
+import { initialState, reduceState, PressedKey, Tick, CircleInfo, EndGameAction} from './state';
 import { readAndPasreCSV, svg, showKeys, gameover} from './util';
 import { updateView, show, hide} from "./view";
-
 import { doc } from "prettier";
+
 
 /**
  * This is the function called on page load. Your main game loop
@@ -56,12 +56,6 @@ export function main(csvContents: string, samples: { [key: string]: Tone.Sampler
     // This use of creating different streams for keyPress is inspired by Week 4 applied class, the moving rectangle exercise and FRP Asteroids example
     const keyP$ = fromKey("KeyP").pipe(map((e => new PressedKey(e))))
     const keyR$ = fromKey("KeyR").pipe(map((e => new PressedKey(e))))
-
-    // NEW: keyup stream for releasing holds (long notes)
-    const keyUp$ = fromEvent<KeyboardEvent>(document, "keyup").pipe(
-    map(e => new ReleasedKey(e))
-    );
-
     
     /**Reset feature */
     // This use of reset feature is inspired by Week 4 applied class: Monte Carlo pi approximation exercise
@@ -95,6 +89,10 @@ export function main(csvContents: string, samples: { [key: string]: Tone.Sampler
         main(csvContents, samples);
     });
 
+    // 
+    // const state$ = new BehaviorSubject<State>(initialState);
+
+
     // This use of merging different stream, scan it and subscribe concept is inspired by FRP Asteroids game example:
     // Create observables for ticked, notes
     const ticked$ = tick$.pipe(map(value => new Tick(value)))
@@ -103,21 +101,13 @@ export function main(csvContents: string, samples: { [key: string]: Tone.Sampler
     const notes$ = readAndPasreCSV(csvContents).pipe(map((note: Note) => new CircleInfo(note)));
 
     // Observable to track the current state
-    // inspired by ChatGPT.
     const currentState$ = new Subject<State>();
-
-    // We using Subject so that we can manually emit the values using next()
-    // once we emit the value, we check if the the game observable stops emitting value for 10 seconds
-    // then check if the activeCircles are empty
-    // if true, then we emit the value (new EndGameAction) to set the gameEnd to true
-    // unsubscribe from the game loop and show the game over screen
-
 
     // Observable to track the game end
     const gameEnd$ = currentState$.pipe(
 
         // DebounceTime will wait for 10 seconds before emitting the last value
-        debounceTime(10000),
+        debounceTime(1000),
 
         // Filter the state where activeCircles and userPlayCircles are empty
         filter((state: State) => state.activeCircles.length === 0),        
@@ -135,55 +125,31 @@ export function main(csvContents: string, samples: { [key: string]: Tone.Sampler
     });
 
     // Merge all the observables and scan the state reducing it and update the view
-//     const gameLoop$ = merge(ticked$, notes$, keyH$, keyJ$, keyK$, keyL$, keyP$, keyR$)
-//     .pipe(
-//         scan((state, action) => {
-            
-//             // reduce the state
-//             const newState = reduceState(state, action);          
-
-//             // update the state to current state
-//             currentState$.next(newState);
-            
-//             // return the new state
-//             return newState;
-//         }, initialState),
-
-//         // once scan is done, take until the game ends
-//         takeUntil(gameEnd$)
-//     )
-//     // subscribe to the game loop, update the view
-//     .subscribe((s: State) => {
-
-//         if (!s.gameEnd) {
-//             hide(gameover);
-//             updateView(s, samples);
-//         }
-//     }
-// );
-
-    const gameLoop$ = merge(
-        ticked$,
-        notes$,
-        keyH$, keyJ$, keyK$, keyL$,
-        keyP$, keyR$,
-        keyUp$          // 👈 NEW
-        )
-        .pipe(
+    const gameLoop$ = merge(ticked$, notes$, keyH$, keyJ$, keyK$, keyL$, keyP$, keyR$)
+    .pipe(
         scan((state, action) => {
-            const newState = reduceState(state, action);
+            
+            // reduce the state
+            const newState = reduceState(state, action);          
+
+            // update the state to current state
             currentState$.next(newState);
+            
+            // return the new state
             return newState;
         }, initialState),
+
+        // once scan is done, take until the game ends
         takeUntil(gameEnd$)
-        )
-        .subscribe((s: State) => {
+    )
+    // subscribe to the game loop, update the view
+    .subscribe((s: State) => {
+
         if (!s.gameEnd) {
             hide(gameover);
             updateView(s, samples);
         }
-        });
-
+    });
         
 }
 
