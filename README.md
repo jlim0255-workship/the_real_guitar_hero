@@ -8,7 +8,7 @@ long note score multiplier
 keypress mapping colors
 
 # Preview
-
+![Alt text](/assets/guitarhero.png)
 
 
 ## Usage
