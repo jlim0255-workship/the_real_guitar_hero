@@ -1,4 +1,15 @@
-# Assignment 1
+# The real guitar hero
+This is a functional reactive programming project using pure functions and RxJS for declarative code. The core logic is in main.ts, with state management in state.ts and rendering in view.ts. It emphasizes immutability and reactive streams for game development. Includes special features such as:
+
+custom song library
+reset button
+streak store n' break
+long note score multiplier
+keypress mapping colors
+
+# Preview
+
+
 
 ## Usage
 
